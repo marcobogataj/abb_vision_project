@@ -137,6 +137,7 @@ include_directories(
 # add_executable(${PROJECT_NAME}_node src/pcl_processing_node.cpp)
 add_executable(example src/example.cpp)
 add_executable(voxel_grid src/voxel_grid.cpp)
+add_executable(segmentation segmentation.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

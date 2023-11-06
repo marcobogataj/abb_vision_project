@@ -24,13 +24,12 @@ main (int argc, char** argv)
   //initialize Pount cloud objects
   pcl::PCLPointCloud2::Ptr cloud (new pcl::PCLPointCloud2 ());
   pcl::PCLPointCloud2 cloud_filtered;
-  pcl::PCLPointCloud2 pcl_pc;
     
   // Fill in the cloud data
   pcl::PCDReader reader;
-  // Replace the path below with the path where you saved your file
-  reader.read ("/home/abb/Documents/pcl_samples/table_scene_lms400.pcd", *cloud); 
-    
+  // Replace the path below with the path where you saved your file 
+  reader.read ("/home/abb/Documents/zivid_captures/zivid_manual_holefilling.pcd", *cloud); 
+  
   // Create the filtering object
   pcl::VoxelGrid<pcl::PCLPointCloud2> sor;
   sor.setInputCloud (cloud);
@@ -40,8 +39,6 @@ main (int argc, char** argv)
   // Convert from PCD to ROS msg data type
   sensor_msgs::PointCloud2 output;
   sensor_msgs::PointCloud2 input;
-  
-  //pcl::toPCLPointCloud2(*cloud, pcl_pc);
  
   while (ros::ok())
   {
