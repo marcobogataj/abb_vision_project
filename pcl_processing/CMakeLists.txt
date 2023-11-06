@@ -136,6 +136,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/pcl_processing_node.cpp)
 add_executable(example src/example.cpp)
+add_executable(voxel_grid src/voxel_grid.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -152,6 +153,7 @@ add_executable(example src/example.cpp)
 #   ${catkin_LIBRARIES}
 # )
 target_link_libraries(example ${catkin_LIBRARIES})
+target_link_libraries (voxel_grid ${catkin_LIBRARIES})
 
 #############
 ## Install ##
