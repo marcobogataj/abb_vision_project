@@ -47,7 +47,7 @@ void cloud_callback(const pcl::PointCloud<PointT>::ConstPtr& input)
   vox.setLeafSize (0.001f, 0.001f, 0.001f);
   vox.filter (*output);
 
-  pub.publish(*output); //send output message
+  pub.publish(*input); //send output message
 }
 
 int
