@@ -19,12 +19,10 @@
   <!-- push robot_description to factory and spawn robot in gazebo -->
   <node name="irb120_robotiq_spawn" pkg="gazebo_ros" type="spawn_model" output="screen" args="-urdf -param robot_description -model irb120_with_gripper" />
 
-    <!-- convert joint states to TF transforms for rviz, etc -->
-  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher"
-  output="screen">
-  </node>
-
-  <!-- init and start Gazebo ros_control interface -->
+  <!--Load and launch the joint trajectory controller-->
   <include file="$(find irb120_robotiq_gazebo)/launch/irb120_robotiq_control.launch"/>
+
+  <!-- Robot State Publisher for TF of each joint: publishes all the current states of the joint, then RViz can visualize -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher" respawn="false" output="screen"/>
 
 </launch>
