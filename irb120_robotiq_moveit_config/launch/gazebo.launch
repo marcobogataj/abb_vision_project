@@ -13,7 +13,7 @@
   </include>
 
   <!-- Set the robot urdf on the parameter server -->
-  <param name="robot_description" textfile="$(find irb120_robotiq_moveit_config)/config/gazebo_irb120_with_gripper.urdf" />
+  <param name="robot_description" command="xacro  '$(find irb120_gripper_pkg)/urdf/irb120_with_robotiq_STAR.xacro'" />
 
   <!-- Unpause the simulation after loading the robot model -->
   <arg name="unpause" value="$(eval '' if arg('paused') else '-unpause')" />
@@ -24,7 +24,7 @@
 
   <!-- Load the controller parameters onto the parameter server -->
   <rosparam file="$(find irb120_robotiq_moveit_config)/config/gazebo_controllers.yaml" />
-  <include file="$(dirname)/ros_controllers.launch"/>
+  <include file="$(dirname)/simple_moveit_controller_manager.launch.xml"/>
 
   <!-- Spawn the Gazebo ROS controllers -->
   <node name="gazebo_controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen" args="joint_state_controller" />

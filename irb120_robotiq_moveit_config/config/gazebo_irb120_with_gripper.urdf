@@ -522,6 +522,11 @@
             <robotNamespace>/</robotNamespace>
         </plugin>
     </gazebo>
+    <gazebo>
+        <plugin filename="libgazebo_ros_control.so" name="gazebo_ros_control">
+            <robotNamespace />
+        </plugin>
+    </gazebo>
     <transmission name="trans_joint_1">
         <type>transmission_interface/SimpleTransmission</type>
         <joint name="joint_1">
