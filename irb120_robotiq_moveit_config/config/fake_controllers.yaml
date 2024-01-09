@@ -12,6 +12,7 @@ controller_list:
     type: $(arg fake_execution_type)
     joints:
       - robotiq_85_left_knuckle_joint
+      
 initial:  # Define initial robot poses per group
   - group: irb_120
     pose: home
