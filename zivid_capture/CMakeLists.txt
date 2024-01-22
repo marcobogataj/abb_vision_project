@@ -11,9 +11,15 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
+  genmsg
   zivid_camera
   dynamic_reconfigure
 )
+
+add_service_files(FILES ZividCaptureSuggested.srv)
+
+## Generate added messages and services
+generate_messages(DEPENDENCIES std_msgs)
 
 catkin_package(
    CATKIN_DEPENDS zivid_camera
@@ -48,7 +54,7 @@ function(register_cpp_sample)
 endfunction()
 
 register_cpp_sample(NAME hello_cpp_e SRC src/hello_cpp_f.cpp)
-register_cpp_sample(NAME test_zivid_e SRC src/test_zivid_f.cpp)
+register_cpp_sample(NAME capture_assistant SRC src/capture_assistant.cpp)
 
 install(
   DIRECTORY launch/

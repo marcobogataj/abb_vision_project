@@ -4,6 +4,9 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <ros/ros.h>
 
+//include service header
+#include <zivid_capture/ZividCaptureSuggested.h>
+
 
 #define CHECK(cmd)                                                                                                     \
   do                                                                                                                   \
@@ -38,38 +41,35 @@ void capture()
   CHECK(ros::service::call("/zivid_camera/capture", capture));
 }
 
-void on_points(const sensor_msgs::PointCloud2ConstPtr&)
-{
-  ROS_INFO("PointCloud received");
-}
-
-void on_image_color(const sensor_msgs::ImageConstPtr&)
-{
-  ROS_INFO("2D color image received");
-}
-
 }  // namespace
 
-int main(int argc, char** argv)
+bool execute_capture(zivid_capture::ZividCaptureSuggested::Request  &req,
+                     zivid_capture::ZividCaptureSuggested::Response &res)
 {
-  ros::init(argc, argv, "sample_capture_assistant_cpp");
-  ros::NodeHandle n;
-
-  ROS_INFO("Starting sample_capture_assistant.cpp");
-
-  CHECK(ros::service::waitForService(ca_suggest_settings_service_name, default_wait_duration));
-
-  ros::AsyncSpinner spinner(1);
-  spinner.start();
-
-  auto points_sub = n.subscribe("/zivid_camera/points/xyzrgba", 1, on_points);
-  auto image_color_sub = n.subscribe("/zivid_camera/color/image_color", 1, on_image_color);
+  ROS_INFO("Get suggested settings...");
 
   capture_assistant_suggest_settings();
 
+  ROS_INFO("Capture...");
+
   capture();
 
-  ros::waitForShutdown();
+  ROS_INFO("Capture...OK");
+
+  return true;
+}
+
+int main(int argc, char** argv)
+{
+  ros::init(argc, argv, "capture_assistant");
+  ros::NodeHandle n;
+  ros::ServiceServer service = n.advertiseService("zivid_capture/zivid_capture_suggested", execute_capture);
+  
+  CHECK(ros::service::waitForService(ca_suggest_settings_service_name, default_wait_duration));
+
+  ROS_INFO("Ready to capture with suggested settings.");
+
+  ros::spin();
 
   return 0;
 }

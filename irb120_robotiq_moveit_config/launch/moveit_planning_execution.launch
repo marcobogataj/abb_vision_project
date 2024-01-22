@@ -25,7 +25,7 @@
   </include>
 
   <!-- Load world collision meshes-->
-  <node name="add_collision_mesh" pkg="object_visualizer" type="add_collision_mesh" respawn="true" />
+  <node name="add_collision_mesh" pkg="motion_planning" type="add_collision_mesh" respawn="true" />
 
   <arg name="scene_file" default="$(find irb120_robotiq_moveit_config)/scenes/back_collision_plane.scene"/> 
   <node name = "moveit_publish_scene_from_text" pkg= "moveit_ros_planning" type = "moveit_publish_scene_from_text" args= "$(arg scene_file)"/>
@@ -65,6 +65,9 @@
   <include file="$(find irb120_robotiq_moveit_config)/launch/default_warehouse_db.launch" if="$(arg db)">
     <arg name="moveit_warehouse_database_path" value="$(arg db_path)"/>
   </include>
+
+  <!-- Publish Zivid Camera frame -->
+  <node name="my_tf2_broadcaster" pkg="tf_test" type="my_tf2_broadcaster" />
 
 
 </launch>

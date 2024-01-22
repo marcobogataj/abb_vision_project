@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(pcl_processing)
+project(motion_planning)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -8,24 +8,21 @@ project(pcl_processing)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  pcl_conversions
-  pcl_ros
-  roscpp
-  sensor_msgs
-  tf2_ros
-  tf2_eigen
-  tf2_geometry_msgs
+  cmake_modules
   interactive_markers
   moveit_core
   moveit_ros_perception
   moveit_ros_planning_interface
   moveit_visual_tools
+  pluginlib
+  roscpp
+  std_msgs
   visualization_msgs
-  message_filters
 )
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
+
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -80,7 +77,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   sensor_msgs
+#   std_msgs
 # )
 
 ################################################
@@ -114,8 +111,8 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES pcl_processing
-#  CATKIN_DEPENDS pcl_conversions pcl_ros roscpp sensor_msgs
+#  LIBRARIES motion_planning
+#  CATKIN_DEPENDS roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
 
@@ -132,7 +129,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/pcl_processing.cpp
+#   src/${PROJECT_NAME}/motion_planning.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -143,14 +140,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/pcl_processing_node.cpp)
-add_executable(example src/example.cpp)
-add_executable(voxel_grid src/voxel_grid.cpp)
-add_executable(screw_perception src/screw_perception.cpp)
-add_executable(test_calibration src/test_calibration.cpp)
-add_executable(cylinder_perception src/cylinder_perception.cpp)
-add_executable(pcl_capture src/pcl_capture.cpp)
-add_executable(test_sub_normals src/test_sub_normals.cpp)
+# add_executable(${PROJECT_NAME}_node src/motion_planning_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -166,17 +156,20 @@ add_executable(test_sub_normals src/test_sub_normals.cpp)
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-target_link_libraries(example ${catkin_LIBRARIES})
-target_link_libraries(voxel_grid ${catkin_LIBRARIES})
-target_link_libraries(screw_perception ${catkin_LIBRARIES})
-target_link_libraries(test_calibration ${catkin_LIBRARIES})
-target_link_libraries(cylinder_perception ${catkin_LIBRARIES})
-target_link_libraries(pcl_capture ${catkin_LIBRARIES})
-target_link_libraries(test_sub_normals ${catkin_LIBRARIES})
+
+add_executable(calibration_target_node src/calibration_target.cpp)
+add_dependencies(calibration_target_node ${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(calibration_target_node ${catkin_LIBRARIES})
+
+add_executable(add_collision_mesh src/add_collision_mesh.cpp)
+add_dependencies(add_collision_mesh ${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(add_collision_mesh ${catkin_LIBRARIES})
 
 #############
 ## Install ##
 #############
+
+install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 # all install targets should use catkin DESTINATION variables
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
@@ -221,7 +214,7 @@ target_link_libraries(test_sub_normals ${catkin_LIBRARIES})
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_pcl_processing.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_motion_planning.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()
