@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /MotionPlanning1
         - /TF1
+        - /TF1/Frames1
         - /PointCloud21
         - /MarkerArray1
         - /PointCloud22
@@ -356,6 +357,18 @@ Visualization Manager:
           Value: false
         robotiq_85_base_link:
           Value: false
+        robotiq_85_left_finger_tip_link:
+          Value: false
+        robotiq_85_left_inner_knuckle_link:
+          Value: false
+        robotiq_85_left_knuckle_link:
+          Value: false
+        robotiq_85_right_finger_tip_link:
+          Value: false
+        robotiq_85_right_inner_knuckle_link:
+          Value: false
+        robotiq_85_right_knuckle_link:
+          Value: false
         tool0:
           Value: true
         world:
@@ -382,7 +395,16 @@ Visualization Manager:
                         flange:
                           tool0:
                             robotiq_85_base_link:
-                              {}
+                              robotiq_85_left_inner_knuckle_link:
+                                robotiq_85_left_finger_tip_link:
+                                  {}
+                              robotiq_85_left_knuckle_link:
+                                {}
+                              robotiq_85_right_inner_knuckle_link:
+                                robotiq_85_right_finger_tip_link:
+                                  {}
+                              robotiq_85_right_knuckle_link:
+                                {}
           zivid_optical_frame:
             {}
       Update Interval: 0
@@ -467,7 +489,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 1.132763147354126
+      Distance: 1.4761152267456055
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -475,17 +497,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.75
       Focal Point:
-        X: 0.22391411662101746
-        Y: -0.008728877641260624
-        Z: 0.22783668339252472
+        X: 0.1890569031238556
+        Y: -0.2379222810268402
+        Z: 0.3137344419956207
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.3147987723350525
+      Pitch: 0.4247974157333374
       Target Frame: world
-      Yaw: 4.244937896728516
+      Yaw: 5.209938049316406
     Saved: ~
 Window Geometry:
   Displays:

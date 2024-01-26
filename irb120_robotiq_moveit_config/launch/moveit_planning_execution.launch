@@ -34,8 +34,10 @@
   <group if="$(arg sim)">
     <include file="$(find industrial_robot_simulator)/launch/robot_interface_simulator.launch" />
 
-    <!-- Launch robotiq action server (fake for now, no simulation)-->
-    <include file="$(find robotiq_2f_gripper_action_server)/launch/robotiq_2f_gripper_action_server.launch" /> 
+    <!-- Launch robotiq action server in simulation mode-->
+    <include file="$(find robotiq_2f_gripper_control)/launch/robotiq_action_server.launch" >
+      <arg name="joint_name" value="robotiq_85_left_knuckle_joint"/>
+    </include>
   </group>
 
   <!-- run the "real robot" interface nodes -->
@@ -46,8 +48,10 @@
       <arg name="robot_ip" value="$(arg robot_ip)"/>
     </include>
 
-    <!-- Launch robotiq action server (fake for now, no real feedback)-->
-    <include file="$(find robotiq_2f_gripper_action_server)/launch/robotiq_2f_gripper_action_server.launch" />
+    <!-- Launch robotiq action server -->
+    <include file="$(find robotiq_2f_gripper_control)/launch/robotiq_action_server.launch" >
+      <arg name="joint_name" value="robotiq_85_left_knuckle_joint"/>
+    </include>
   </group>
 
   <!-- publish the robot state (tf transforms) -->

@@ -102,6 +102,7 @@
     <param name="planning_scene_monitor/publish_transforms_updates" value="$(arg publish_monitored_planning_scene)" />
 
     <remap from="/arm_controller/joint_trajectory_action" to="/joint_trajectory_action" />
+    
   </node>
 
 

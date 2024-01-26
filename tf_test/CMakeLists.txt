@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.0.2)
-project(motion_planning)
+project(tf_test)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
@@ -8,18 +8,12 @@ project(motion_planning)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
-  cmake_modules
-  interactive_markers
-  moveit_core
-  moveit_ros_perception
-  moveit_ros_planning_interface
-  moveit_visual_tools
-  pluginlib
+  geometry_msgs
   roscpp
   std_msgs
-  visualization_msgs
   tf2_msgs
   tf2_ros
+  tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -79,7 +73,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate added messages and services with any dependencies listed here
 # generate_messages(
 #   DEPENDENCIES
-#   std_msgs
+#   geometry_msgs#   std_msgs#   tf2_msgs
 # )
 
 ################################################
@@ -113,8 +107,8 @@ find_package(catkin REQUIRED COMPONENTS
 ## DEPENDS: system dependencies of this project that dependent projects also need
 catkin_package(
 #  INCLUDE_DIRS include
-#  LIBRARIES motion_planning
-#  CATKIN_DEPENDS roscpp rospy std_msgs
+#  LIBRARIES tf_test
+#  CATKIN_DEPENDS geometry_msgs roscpp std_msgs tf2_msgs tf2_ros
 #  DEPENDS system_lib
 )
 
@@ -131,7 +125,7 @@ include_directories(
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
-#   src/${PROJECT_NAME}/motion_planning.cpp
+#   src/${PROJECT_NAME}/tf_test.cpp
 # )
 
 ## Add cmake target dependencies of the library
@@ -142,7 +136,7 @@ include_directories(
 ## Declare a C++ executable
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
-# add_executable(${PROJECT_NAME}_node src/motion_planning_node.cpp)
+# add_executable(${PROJECT_NAME}_node src/tf_test_node.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -158,28 +152,14 @@ include_directories(
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
-
-add_executable(calibration_target_node src/calibration_target.cpp)
-add_dependencies(calibration_target_node ${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(calibration_target_node ${catkin_LIBRARIES})
-
-add_executable(add_collision_mesh src/add_collision_mesh.cpp)
-add_dependencies(add_collision_mesh ${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(add_collision_mesh ${catkin_LIBRARIES})
-
-add_executable(bin_picking_test src/bin_picking_test.cpp)
-add_dependencies(bin_picking_test ${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(bin_picking_test ${catkin_LIBRARIES})
-
-add_executable(simple_bin_picking_test src/simple_bin_picking_test.cpp)
-add_dependencies(simple_bin_picking_test${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(simple_bin_picking_test ${catkin_LIBRARIES})
+add_executable(my_tf2_listener src/my_tf2_listener.cpp)
+add_executable(my_tf2_broadcaster src/my_tf2_broadcaster.cpp)
+target_link_libraries(my_tf2_listener ${catkin_LIBRARIES})
+target_link_libraries(my_tf2_broadcaster ${catkin_LIBRARIES})
 
 #############
 ## Install ##
 #############
-
-install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 
 # all install targets should use catkin DESTINATION variables
 # See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
@@ -224,7 +204,7 @@ install(DIRECTORY launch DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION})
 #############
 
 ## Add gtest based cpp test target and link libraries
-# catkin_add_gtest(${PROJECT_NAME}-test test/test_motion_planning.cpp)
+# catkin_add_gtest(${PROJECT_NAME}-test test/test_tf_test.cpp)
 # if(TARGET ${PROJECT_NAME}-test)
 #   target_link_libraries(${PROJECT_NAME}-test ${PROJECT_NAME})
 # endif()

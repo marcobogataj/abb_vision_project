@@ -17,6 +17,7 @@
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit_msgs/CollisionObject.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 using namespace message_filters;
 
@@ -45,7 +46,7 @@ public:
     // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     // Define a collision object ROS message.
     moveit_msgs::CollisionObject collision_object;
-    collision_object.header.frame_id = "zivid_optical_frame";
+    collision_object.header.frame_id = "base_link";
     collision_object.id = "cylinder";
 
     // Define a cylinder which will be added to the world.
@@ -57,11 +58,44 @@ public:
     /* Setting radius of cylinder. */
     primitive.dimensions[1] = cylinder_params.radius;
 
+    geometry_msgs::Quaternion q; //quaternion CAM to ROB [ 0.9830354, -0.0165454, 0.1252577, -0.1329591 ]
+    q.x = 0.9830354;
+    q.y = -0.0165454;
+    q.z = 0.1252577;
+    q.w = -0.1329591;
+
+    geometry_msgs::Vector3 axis_cam;
+    axis_cam.x = cylinder_params.direction_vec[0];
+    axis_cam.y = cylinder_params.direction_vec[1];
+    axis_cam.z = cylinder_params.direction_vec[2];
+
+    geometry_msgs::Vector3 center_cam;
+    center_cam.x = cylinder_params.center_pt[0];
+    center_cam.y = cylinder_params.center_pt[1];
+    center_cam.z = cylinder_params.center_pt[2];
+
+    geometry_msgs::Vector3 axis_rob;
+
+    geometry_msgs::Vector3 t; 
+    t.x = 0; 
+    t.y = 0;
+    t.z = 0;
+
+    axis_rob = quat_trasl_rotate(axis_cam,q,t); //rotate using camera calibration
+
+    t.x = +0.037611496; 
+    t.y = -0.595347046;
+    t.z = +0.677256409;
+
+    geometry_msgs::Vector3 point_rob;
+
+    point_rob = quat_trasl_rotate(center_cam,q,t); //rotate using camera calibration
+
     // Define a pose for the cylinder (specified relative to frame_id).
     geometry_msgs::Pose cylinder_pose;
     /* Computing and setting quaternion from axis angle representation. */
-    Eigen::Vector3d cylinder_z_direction(cylinder_params.direction_vec[0], cylinder_params.direction_vec[1],
-                                         cylinder_params.direction_vec[2]);
+    Eigen::Vector3d cylinder_z_direction(axis_rob.x, axis_rob.y, axis_rob.z);
+
     Eigen::Vector3d origin_z_direction(0., 0., 1.);
     Eigen::Vector3d axis;
     axis = origin_z_direction.cross(cylinder_z_direction);
@@ -72,10 +106,10 @@ public:
     cylinder_pose.orientation.z = axis.z() * sin(angle / 2);
     cylinder_pose.orientation.w = cos(angle / 2);
 
-    // Setting the position of cylinder.
-    cylinder_pose.position.x = cylinder_params.center_pt[0];
-    cylinder_pose.position.y = cylinder_params.center_pt[1];
-    cylinder_pose.position.z = cylinder_params.center_pt[2];
+    // Setting the position of cylinder (translate using camera calibration)
+    cylinder_pose.position.x = point_rob.x;
+    cylinder_pose.position.y = point_rob.y;
+    cylinder_pose.position.z = point_rob.z;
 
     // Add cylinder as collision object
     collision_object.primitives.push_back(primitive);
@@ -86,7 +120,7 @@ public:
     visualization_msgs::MarkerArray marker_array;
     marker_array.markers.resize(2);
 
-    marker_array.markers[0].header.frame_id = "zivid_optical_frame";
+    marker_array.markers[0].header.frame_id = "base_link"; //
     marker_array.markers[0].header.stamp = ros::Time();
     //marker.ns = "my_namespace";
     marker_array.markers[0].id = 0;
@@ -108,7 +142,7 @@ public:
     marker_array.markers[0].color.g = 1.0;
     marker_array.markers[0].color.b = 0.0;
 
-    marker_array.markers[1].header.frame_id = "zivid_optical_frame";
+    marker_array.markers[1].header.frame_id = "base_link";
     marker_array.markers[1].header.stamp = ros::Time();  
     marker_array.markers[1].id = 1;
     marker_array.markers[1].type = visualization_msgs::Marker::TEXT_VIEW_FACING;
@@ -135,6 +169,19 @@ public:
 
     visualization_publisher_.publish( marker_array );
     // END_SUB_TUTORIAL
+  }
+
+  geometry_msgs::Vector3 quat_trasl_rotate(geometry_msgs::Vector3 const &point,
+                                          geometry_msgs::Quaternion const &quat,
+                                          geometry_msgs::Vector3 const &trasl) { 
+    tf2::Vector3 const tf2_point(point.x, point.y, point.z);
+    tf2::Quaternion const tf2_quat(quat.x, quat.y, quat.z, quat.w);
+    tf2::Vector3 const tf2_output = tf2::quatRotate(tf2_quat, tf2_point);
+    geometry_msgs::Vector3 output;
+    output.x = tf2_output.getX()+trasl.x;
+    output.y = tf2_output.getY()+trasl.y;
+    output.z = tf2_output.getZ()+trasl.z;
+    return output;
   }
 
   /** \brief Given the pointcloud containing just the cylinder,
