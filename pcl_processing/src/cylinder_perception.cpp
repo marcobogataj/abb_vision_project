@@ -53,11 +53,11 @@ public:
     shape_msgs::SolidPrimitive primitive;
     primitive.type = primitive.CYLINDER;
     primitive.dimensions.resize(2);
-    /* Setting height of cylinder. */
+    // Setting height of cylinder. 
     primitive.dimensions[0] = cylinder_params.height;
-    /* Setting radius of cylinder. */
-    primitive.dimensions[1] = cylinder_params.radius;
-
+    // Setting radius of cylinder. 
+    primitive.dimensions[1] = cylinder_params.radius; 
+                                                        
     geometry_msgs::Quaternion q; //quaternion CAM to ROB [ 0.9830354, -0.0165454, 0.1252577, -0.1329591 ]
     q.x = 0.9830354;
     q.y = -0.0165454;
@@ -81,7 +81,7 @@ public:
     t.y = 0;
     t.z = 0;
 
-    axis_rob = quat_trasl_rotate(axis_cam,q,t); //rotate using camera calibration
+    axis_rob = quat_trasl_rotate(axis_cam,q,t); //rotate and translate using camera calibration
 
     t.x = +0.037611496; 
     t.y = -0.595347046;
@@ -89,7 +89,7 @@ public:
 
     geometry_msgs::Vector3 point_rob;
 
-    point_rob = quat_trasl_rotate(center_cam,q,t); //rotate using camera calibration
+    point_rob = quat_trasl_rotate(center_cam,q,t); //rotate and translate using camera calibration
 
     // Define a pose for the cylinder (specified relative to frame_id).
     geometry_msgs::Pose cylinder_pose;
@@ -100,6 +100,7 @@ public:
     Eigen::Vector3d axis;
     axis = origin_z_direction.cross(cylinder_z_direction);
     axis.normalize();
+
     double angle = acos(cylinder_z_direction.dot(origin_z_direction));
     cylinder_pose.orientation.x = axis.x() * sin(angle / 2);
     cylinder_pose.orientation.y = axis.y() * sin(angle / 2);
@@ -115,7 +116,8 @@ public:
     collision_object.primitives.push_back(primitive);
     collision_object.primitive_poses.push_back(cylinder_pose);
     collision_object.operation = collision_object.ADD;
-    planning_scene_interface_.applyCollisionObject(collision_object);
+
+    planning_scene_interface_.applyCollisionObject(collision_object); 
 
     visualization_msgs::MarkerArray marker_array;
     marker_array.markers.resize(2);
@@ -160,7 +162,7 @@ public:
     marker_array.markers[1].pose.position.x = cylinder_pose.position.x;
     marker_array.markers[1].pose.position.y = cylinder_pose.position.y;
     marker_array.markers[1].pose.position.z = cylinder_pose.position.z-cylinder_params.radius*2 - cylinder_params.height;
-    marker_array.markers[1].scale.z = 0.005; //font size
+    marker_array.markers[1].scale.z = 0.02; //font size
 
     marker_array.markers[1].color.a = 0.8; // Don't forget to set the alpha!
     marker_array.markers[1].color.r = 0.0;
@@ -373,7 +375,7 @@ public:
     segmentor.setModelType(pcl::SACMODEL_CYLINDER);
     segmentor.setMethodType(pcl::SAC_RANSAC);
     // Set the normal angular distance weight
-    segmentor.setNormalDistanceWeight(0.1);
+    segmentor.setNormalDistanceWeight(0.3);
     // run at max 1000 iterations before giving up
     segmentor.setMaxIterations(5000);
     // tolerance for variation from model

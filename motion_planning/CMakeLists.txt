@@ -20,6 +20,7 @@ find_package(catkin REQUIRED COMPONENTS
   visualization_msgs
   tf2_msgs
   tf2_ros
+  rviz
 )
 
 ## System dependencies are found with CMake's conventions
