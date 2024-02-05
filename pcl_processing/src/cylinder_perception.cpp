@@ -5,12 +5,16 @@
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
+#include <pcl/filters/uniform_sampling.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/extract_indices.h>
+#include <pcl/segmentation/extract_clusters.h>
 #include <pcl/filters/project_inliers.h>
 #include <pcl/features/normal_3d.h>
 #include <pcl/segmentation/sac_segmentation.h>
+#include <pcl/common/centroid.h>
+#include <pcl/common/colors.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/time_synchronizer.h>
@@ -29,12 +33,12 @@ public:
   CylinderSegment() : sync(cloud_subscriber_, normals_subscriber_, 10)
   {
     cloud_subscriber_.subscribe(nh_,"/zivid_camera/points/xyz", 1);
-    normals_subscriber_.subscribe(nh_,"zivid_camera/normals/xyz",1);
+    normals_subscriber_.subscribe(nh_,"/zivid_camera/normals/xyz",1);
 
     sync.registerCallback(boost::bind(&CylinderSegment::cloudCB,this, _1, _2));
 
     visualization_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 0 );
-    processed_cloud_publisher_ = nh_.advertise<pcl::PointCloud<pcl::PointXYZ>>("/pcl_processing/filtered/xyz", 1);
+    processed_cloud_publisher_ = nh_.advertise<pcl::PointCloud<pcl::PointXYZRGB>>("/pcl_processing/clusters/xyzrgb", 1);
   }
 
   /** \brief Given the parameters of the cylinder add the cylinder to the planning scene. */
@@ -272,16 +276,17 @@ public:
 
   /** \brief Given a pointcloud extract the ROI defined by the user.
       @param cloud - Pointcloud whose ROI needs to be extracted. */
-  void passThroughFilter(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, const pcl::PointIndices::Ptr& inliers_filtered)
+  void passThroughFilter(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)//, const pcl::PointIndices::Ptr& inliers_filtered)
   {
     ROS_INFO("Apply passthrough filter.");
-    pcl::PassThrough<pcl::PointXYZ> pass(true);
+    pcl::PassThrough<pcl::PointXYZ> pass;//(true);
+    //pass.setKeepOrganized(true);
     pass.setInputCloud(cloud);
     pass.setFilterFieldName("z");
     // min and max values in z axis to keep
     pass.setFilterLimits(0.3, 0.64);
     pass.filter(*cloud);
-    pass.getRemovedIndices(*inliers_filtered);
+    //pass.getRemovedIndices(*inliers_filtered);
   }
 
   void voxelFilter(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
@@ -289,18 +294,20 @@ public:
     ROS_INFO("Apply voxelization.");
     pcl::VoxelGrid<pcl::PointXYZ> vox;
     vox.setInputCloud (cloud);
-    vox.setLeafSize (0.001f, 0.001f, 0.001f);
+    vox.setLeafSize (0.0005f, 0.0005f, 0.0005f);
     vox.filter (*cloud);
   }
 
-  void statisticalOutliersFilter(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)
+  void statisticalOutliersFilter(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)//, const pcl::PointIndices::Ptr& inliers_filtered)
   {
     ROS_INFO("Remove outliers.");
-    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;
+    pcl::StatisticalOutlierRemoval<pcl::PointXYZ> sor;//(true);
+    //sor.setKeepOrganized(true);
     sor.setInputCloud (cloud);
     sor.setMeanK (100);
     sor.setStddevMulThresh (1);
     sor.filter (*cloud); 
+    //sor.getRemovedIndices(*inliers_filtered);
   }
 
   /** \brief Given the pointcloud and pointer cloud_normals compute the point normals and store in cloud_normals.
@@ -322,12 +329,13 @@ public:
       @param cloud_normals - Point normals.
       @param inliers_plane - Indices whose normals need to be extracted. */
   void extractNormals(const pcl::PointCloud<pcl::Normal>::Ptr& cloud_normals,
-                      const pcl::PointIndices::Ptr& inliers_plane)
+                      const pcl::PointIndices::Ptr& inliers)
   {
     pcl::ExtractIndices<pcl::Normal> extract_normals;
+    //extract_normals.setKeepOrganized(true);
     extract_normals.setNegative(true);
     extract_normals.setInputCloud(cloud_normals);
-    extract_normals.setIndices(inliers_plane);
+    extract_normals.setIndices(inliers);
     extract_normals.filter(*cloud_normals);
   }
 
@@ -345,7 +353,7 @@ public:
     /* run at max 1000 iterations before giving up */
     segmentor.setMaxIterations(1000);
     /* tolerance for variation from model */
-    segmentor.setDistanceThreshold(0.01);
+    segmentor.setDistanceThreshold(0.008);
     segmentor.setInputCloud(cloud);
     /* Create the segmentation object for the planar model and set all the parameters */
     pcl::ModelCoefficients::Ptr coefficients_plane(new pcl::ModelCoefficients);
@@ -359,6 +367,54 @@ public:
     extract_indices.filter(*cloud);
   }
 
+  std::vector<pcl::PointIndices> extractClusters(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud)                     
+  {
+    ROS_INFO("Start cluster extraction...");
+    std::vector<pcl::PointIndices> inliers_clusters;
+    // Creating the KdTree object for the search method of the extraction
+    pcl::search::KdTree<pcl::PointXYZ>::Ptr tree (new pcl::search::KdTree<pcl::PointXYZ>);
+    tree->setInputCloud (cloud);
+
+    pcl::EuclideanClusterExtraction<pcl::PointXYZ> ec;
+    
+    ec.setClusterTolerance (0.005); 
+    ec.setMinClusterSize (1000);
+    ec.setMaxClusterSize (15000);
+    ec.setSearchMethod (tree);
+    ec.setInputCloud (cloud);
+    ec.extract (inliers_clusters);
+    
+    std::cout<< inliers_clusters.size() <<" clusters found!"<<std::endl;
+
+    return inliers_clusters;
+  }
+
+  void labelClusters(const pcl::PointCloud<pcl::PointXYZ>::Ptr& cloud, 
+                      std::vector<pcl::PointIndices> inliers_clusters,
+                       const pcl::PointCloud<pcl::PointXYZRGB>::Ptr& cloud_clusters)
+  {
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_clusters_temp (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    int count_c = 0;
+
+    for (const auto& cluster : inliers_clusters)
+    {
+      pcl::copyPointCloud(*cloud, cluster, *cloud_clusters_temp);
+      pcl::RGB rgb = pcl::GlasbeyLUT::at(count_c);
+
+      for (auto& point : cloud_clusters_temp->points)
+      {
+        point.rgb = *reinterpret_cast<float*>(&rgb);
+      }
+
+      *cloud_clusters = *cloud_clusters + *cloud_clusters_temp;
+
+      count_c++;
+      std::cout<<"Cluster "<<count_c<<": "<<cloud_clusters_temp->size() <<" points"<<std::endl;
+    }
+
+  }
+  
   /** \brief Given the pointcloud, pointer to pcl::ModelCoefficients and point normals extract the cylinder from the
      pointcloud and store the cylinder parameters in coefficients_cylinder.
       @param cloud - Pointcloud whose plane is removed.
@@ -379,7 +435,7 @@ public:
     // run at max 1000 iterations before giving up
     segmentor.setMaxIterations(5000);
     // tolerance for variation from model
-    segmentor.setDistanceThreshold(0.015);
+    segmentor.setDistanceThreshold(0.010); //0.015 before
     // min max values of radius in meters to consider
     segmentor.setRadiusLimits(0.002, 0.040);
     segmentor.setInputCloud(cloud);
@@ -390,12 +446,14 @@ public:
 
     // Extract the cylinder inliers from the input cloud
     pcl::ExtractIndices<pcl::PointXYZ> extract;
+
+    //extract.setKeepOrganized(true);
     extract.setInputCloud(cloud);
     extract.setIndices(inliers_cylinder);
     extract.setNegative(false);
     extract.filter(*cloud);
   }
-
+  
   void cloudCB(const pcl::PointCloud<pcl::PointXYZ>::ConstPtr& input,
                const pcl::PointCloud<pcl::Normal>::ConstPtr& normals)
   {
@@ -408,20 +466,22 @@ public:
     *cloud = *input;
 
     pcl::PointCloud<pcl::Normal>::Ptr cloud_normals(new pcl::PointCloud<pcl::Normal>);
-    *cloud_normals = *normals;
+    //*cloud_normals = *normals;
 
     pcl::PointIndices::Ptr inliers_filtered(new pcl::PointIndices);
-
 
     ROS_INFO("Segmentation.");
     // Use a passthrough filter to get the region of interest.
     // The filter removes points outside the specified range.
     ROS_INFO("Apply filtering...");
     
-    passThroughFilter(cloud,inliers_filtered);
-    extractNormals(cloud_normals,inliers_filtered);
+    passThroughFilter(cloud);
+    //extractNormals(cloud_normals,inliers_filtered);
+
     //statisticalOutliersFilter(cloud);
-    //voxelFilter(cloud);
+    //extractNormals(cloud_normals,inliers_filtered);
+
+    voxelFilter(cloud);
 
     //ROS_INFO("Compute normals...");
     //computeNormals(cloud, cloud_normals);
@@ -432,9 +492,24 @@ public:
     removePlaneSurface(cloud, inliers_plane);
     // Remove surface points from normals as well
     ROS_INFO("Extract normals...");
-    extractNormals(cloud_normals, inliers_plane);
+    //extractNormals(cloud_normals, inliers_plane);
 
-    processed_cloud_publisher_.publish(*cloud); //publish filtered point cloud
+    //processed_cloud_publisher_.publish(*cloud); //publish filtered point cloud
+
+    //Extract clusters
+    std::vector<pcl::PointIndices> inliers_clusters = extractClusters(cloud);
+
+    pcl::PointCloud<pcl::PointXYZRGB>::Ptr cloud_clusters (new pcl::PointCloud<pcl::PointXYZRGB>);
+
+    labelClusters(cloud,inliers_clusters,cloud_clusters);
+    
+    sensor_msgs::PointCloud2 cloud_clusters_msg;
+    cloud_clusters_msg.header.frame_id = "zivid_optical_frame";
+    cloud_clusters_msg.header.stamp = ros::Time::now();
+
+    pcl_conversions::toPCL(cloud_clusters_msg.header,cloud_clusters->header);
+
+    processed_cloud_publisher_.publish(cloud_clusters); //publish labeled clusters point cloud
 
     // ModelCoefficients will hold the parameters using which we can define a cylinder of infinite length.
     // It has a public attribute |code_start| values\ |code_end| of type |code_start| std::vector<float>\ |code_end|\ .
@@ -445,33 +520,39 @@ public:
     pcl::ModelCoefficients::Ptr coefficients_cylinder(new pcl::ModelCoefficients);
     /* Extract the cylinder using SACSegmentation. */
     ROS_INFO("Extract cylinder...");
-    extractCylinder(cloud, coefficients_cylinder, cloud_normals);
-    // END_SUB_TUTORIAL
-    if (cloud->points.empty() || coefficients_cylinder->values.size() != 7)
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr cloud_cylinder (new pcl::PointCloud<pcl::PointXYZ>);
+    
+    int count_j = 0;
+
+    for (const auto& segment_inliers : inliers_clusters)
+    {
+      count_j++;
+      pcl::copyPointCloud(*cloud, segment_inliers, *cloud_cylinder);
+      computeNormals(cloud_cylinder, cloud_normals);
+      extractCylinder(cloud_cylinder, coefficients_cylinder, cloud_normals);
+      if (!cloud_cylinder->points.empty() && coefficients_cylinder->values.size() == 7)
+      {
+        ROS_INFO("Cylinder found in cluster %d!",count_j);
+        break;
+      }
+    }
+
+    if (cloud_cylinder->points.empty() || coefficients_cylinder->values.size() != 7)
     {
       ROS_ERROR_STREAM_NAMED("cylinder_segment", "Can't find the cylindrical component.");
-      return;
+      cylinder_params.radius = 0; //set radius equal to 0 to inform that no cylinder was found
     }
 
     ROS_INFO("Detected Cylinder - Adding CollisionObject to PlanningScene");
-
-    // BEGIN_TUTORIAL
-    // CALL_SUB_TUTORIAL callback
-    //
-    // Storing Relevant Cylinder Values
-    // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    // The information that we have in |code_start| coefficients_cylinder\ |code_end| is not enough to define our
-    // cylinder.
-    // It does not have the actual location of the cylinder nor the actual height. |br|
-    // We define a struct to hold the parameters that are actually needed for defining a collision object completely.
-    // |br|
-    // CALL_SUB_TUTORIAL param_struct
-    /* Store the radius of the cylinder. */
+    
     cylinder_params.radius = coefficients_cylinder->values[6];
+
     /* Store direction vector of z-axis of cylinder. */
     cylinder_params.direction_vec[0] = coefficients_cylinder->values[3];
     cylinder_params.direction_vec[1] = coefficients_cylinder->values[4];
     cylinder_params.direction_vec[2] = coefficients_cylinder->values[5];
+    
     //
     // Extracting Location and Height
     // ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -480,7 +561,7 @@ public:
     // CALL_SUB_TUTORIAL extract_location_height
 
     // Compute center point and height of the cylinder using point cloud projection on the cylinder axis
-    estimateLocationHeight(cloud, coefficients_cylinder);
+    estimateLocationHeight(cloud_cylinder, coefficients_cylinder);
     // Use the parameters extracted to add the cylinder to the planning scene as a collision object.
     addCylinder();
     // CALL_SUB_TUTORIAL add_cylinder
@@ -511,8 +592,15 @@ private:
     /* Height of the cylinder. */
     double height;
   };
+  struct AddClusterParams
+  {
+    /* centroids */
+    std::vector<pcl::PointXYZ, Eigen::aligned_allocator <pcl::PointXYZ> > centroids;
+  };
+
   // Declare a variable of type AddCylinderParams and store relevant values from ModelCoefficients.
   AddCylinderParams cylinder_params;
+  AddClusterParams cluster_params;
   // END_SUB_TUTORIAL
 };
 

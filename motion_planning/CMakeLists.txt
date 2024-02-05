@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   interactive_markers
   moveit_core
   moveit_ros_perception
+  moveit_ros_planning
   moveit_ros_planning_interface
   moveit_visual_tools
   pluginlib

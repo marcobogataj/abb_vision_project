@@ -73,5 +73,4 @@
   <!-- Publish Zivid Camera frame -->
   <node name="my_tf2_broadcaster" pkg="tf_test" type="my_tf2_broadcaster" />
 
-
 </launch>

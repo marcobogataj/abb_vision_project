@@ -119,7 +119,7 @@ void cloud_callback(const pcl::PointCloud<PointT>::ConstPtr& input)
   std::vector<pcl::PointXYZ, Eigen::aligned_allocator <pcl::PointXYZ> > v_centroids;
   Eigen::Vector4f centroid;
   pcl::PointXYZ centroid_point;
- 
+
   int j = 0;
   for (const auto& cluster : cluster_indices)
   {

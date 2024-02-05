@@ -1,6 +1,7 @@
 #include <ros/ros.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/collision_detection/collision_common.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit_msgs/DisplayRobotState.h>
@@ -203,7 +204,7 @@ int main(int argc, char **argv)
 
     sleep(2.0);
 
-    ros::Duration timeout(10);
+    //ros::Duration timeout(20);
 
     //create a move_group_interface object
     static const std::string PLANNING_GROUP_ARM = "irb_120";
@@ -216,6 +217,19 @@ int main(int argc, char **argv)
 
     //Planning scene interface for collision objects
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+
+    /* //NOT WORKING: To fix
+    auto psmPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
+
+    // Listen for planning scene messages on topic /XXX and apply them to the internal planning scene accordingly
+    psmPtr->startSceneMonitor();
+
+    // Listens to changes of world geometry, collision objects, and (optionally) octomaps
+    psmPtr->startWorldGeometryMonitor();
+    //psmPtr->startWorldGeometryMonitor("/pick_n_place/collision_object");
+  
+    // Listen to joint state updates as well as changes in attached collision objects and update the internal planning scene accordingly
+    psmPtr->startStateMonitor(); */
 
     ros::Publisher display_publisher = nh.advertise<moveit_msgs::DisplayTrajectory>("/move_group/display_planned_path", 1, true);
     moveit_msgs::DisplayTrajectory display_trajectory;
@@ -262,19 +276,17 @@ int main(int argc, char **argv)
         ROS_INFO("Wait for cylinder identification...");
 
 
-        marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh,timeout);
-        if (marker_array_msg == NULL)
-        {
-          ROS_INFO("No cylinder idientified!");
-        }
-        else
+        marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+        v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+        double D = v[7];
+        double H = v[8];
+
+
+        if (D != 0)
         {
           ROS_INFO("Cylinder idientified!");
 
           v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
-
-          double D = v[7];
-          double H = v[8];
 
           std::cout<<"D: "<<D<<"mm "<<"H: "<<H<<"mm "<<std::endl;
           std::cout<<"Position [x,y,z]=["<<v[0]<<","<<v[1]<<","<<v[2]<<"]"<<std::endl;
@@ -292,7 +304,7 @@ int main(int argc, char **argv)
           arm_group.setPoseTarget(target_pose);
           arm_group.move();
 
-          ros::Duration(0.5).sleep(); 
+          //ros::Duration(0.1).sleep(); 
 
           //2 move the arm_group arm to the target pose
 
@@ -302,7 +314,7 @@ int main(int argc, char **argv)
           arm_group.setPoseTarget(target_pose);
           arm_group.move();
 
-          ros::Duration(0.5).sleep();
+          //ros::Duration(0.1).sleep();
 
           //2 - Close gripper
           double joint_value = GripperApertureConversion(D-0.001);
@@ -310,7 +322,7 @@ int main(int argc, char **argv)
           gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
           gripper_group.move();
 
-          ros::Duration(0.5).sleep();
+          //ros::Duration(0.1).sleep();
 
           //3 - Post-grasp movement
           ROS_INFO("Moving to post-grasp position...");
@@ -319,24 +331,28 @@ int main(int argc, char **argv)
           arm_group.setPoseTarget(target_pose);
           arm_group.move();
 
-          ros::Duration(0.5).sleep();  
+          //ros::Duration(0.1).sleep();  
 
           //4 - Go home
           ROS_INFO("Going home...");
           arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
           arm_group.move();
 
-          ros::Duration(0.5).sleep(); 
+          //ros::Duration(0.1).sleep(); 
 
           //5 - Open Gripper
           ROS_INFO("Open gripper...");
           gripper_group.setJointValueTarget(gripper_group.getNamedTargetValues("open_gripper"));
           gripper_group.move();
 
-          ros::Duration(3.0).sleep();
+          //ros::Duration(3.0).sleep();
 
           ROS_INFO("PICKING COMPLETED!");
 
+        }
+        else
+        {
+          ROS_ERROR("No cylinder identified.");
         }
     }
 
