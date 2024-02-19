@@ -6,7 +6,7 @@
   	<xacro:include filename="$(find abb_irb120_gazebo)/urdf/irb120_3_58_macro.xacro"/>	
   	<xacro:abb_irb120_3_58_g prefix=""/>
 
-  	<!-- Fix robot to Gazebo world -->
+  	<!-- Fix robot to world -->
   	<link name="world"/>
   	<joint name="world-base_link-fixed" type="fixed">
     	<parent link="world"/>

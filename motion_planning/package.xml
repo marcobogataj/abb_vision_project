@@ -62,7 +62,6 @@
   <build_depend>tf2_ros</build_depend>
   <build_depend>moveit_visual_tools</build_depend>
   <build_depend>rviz_visual_tools</build_depend>
-  
 
   <build_export_depend>interactive_markers</build_export_depend>
   <build_export_depend>moveit_core</build_export_depend>

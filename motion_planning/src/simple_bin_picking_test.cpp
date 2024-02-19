@@ -14,6 +14,8 @@
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <geometry_msgs/TransformStamped.h>
 #include <rviz_visual_tools/rviz_visual_tools.h>
+#include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/robot_trajectory/robot_trajectory.h>
 
 const ros::Duration default_wait_duration{ 30 };
 
@@ -107,13 +109,13 @@ grasp_pose computeCylinderGrasp(visualization_msgs::MarkerArray::ConstPtr& cylin
 
     tool0_z_axis.normalize();
 
-    grasp.grasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(+0.1628-H/3); 
-    grasp.grasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(+0.1628-H/3);
-    grasp.grasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(+0.1628-H/3);
+    grasp.grasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(+0.1628+H/3); 
+    grasp.grasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(+0.1628+H/3);
+    grasp.grasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(+0.1628+H/3);
 
-    grasp.pregrasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(0.1493+H); 
-    grasp.pregrasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(0.1493+H);
-    grasp.pregrasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(0.1493+H);
+    grasp.pregrasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(0.1628+H); 
+    grasp.pregrasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(0.1628+H);
+    grasp.pregrasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(0.1628+H);
   }
   else
   {
@@ -139,13 +141,15 @@ grasp_pose computeCylinderGrasp(visualization_msgs::MarkerArray::ConstPtr& cylin
 
     tool0_z_axis.normalize();
 
-    grasp.grasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(+0.1628-D/4); 
-    grasp.grasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(+0.1628-D/4);
-    grasp.grasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(+0.1628-D/4);
+    //change D with H for smaller diameter long height objects (+0.006 for offset)
+    grasp.grasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(+0.1628-D/4+0.006); 
+    grasp.grasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(+0.1628-D/4+0.006);
+    grasp.grasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(+0.1628-D/4+0.006);
 
-    grasp.pregrasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(0.1493+D); 
-    grasp.pregrasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(0.1493+D);
-    grasp.pregrasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(0.1493+D);
+    //4cm above target
+    grasp.pregrasp_targetPose.position.x = targetPose.position.x - tool0_z_axis.getX()*(0.1493+0.04); //substitue 0.04 with D 
+    grasp.pregrasp_targetPose.position.y = targetPose.position.y - tool0_z_axis.getY()*(0.1493+0.04);
+    grasp.pregrasp_targetPose.position.z = targetPose.position.z - tool0_z_axis.getZ()*(0.1493+0.04);
   }
 
   //obtain quaternions for pose definiton
@@ -239,6 +243,19 @@ int main(int argc, char **argv)
 
     //Target position 
     geometry_msgs::Pose target_pose;
+    geometry_msgs::Pose target_pose3;
+    
+    std::vector<geometry_msgs::Pose> waypoints;
+    moveit_msgs::RobotTrajectory trajectory;
+    robot_trajectory::RobotTrajectory rt(arm_group.getCurrentState()->getRobotModel(),"irb_120");
+    const double jump_threshold = 1.5;
+    const double eef_step = 0.01;
+    double fraction;
+
+    double joint_value;
+
+    trajectory_processing::IterativeParabolicTimeParameterization itp;
+
     visualization_msgs::MarkerArray::ConstPtr marker_array_msg(new visualization_msgs::MarkerArray);
     std::vector<double> v; //cylindwe params. [x,y,z,qx,qy,qz,qw,diameter,height]
 
@@ -247,13 +264,18 @@ int main(int argc, char **argv)
     // visualize the planning
     
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    moveit::planning_interface::MoveItErrorCode success = arm_group.plan(my_plan);
+    bool success = false;
 
     CHECK(ros::service::waitForService("/zivid_capture/zivid_capture_suggested",default_wait_duration));
 
     ROS_INFO("Ready to capture & pick");
 
-    ROS_INFO("visualizing plan %s", success.val ? "":"FAILED");
+    //0 Initialize gripper 
+    ROS_INFO("Initialize gripper...");
+    joint_value = GripperApertureConversion(0.02); 
+    gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
+    gripper_group.move();
+
 
     while(ros::ok())
     {
@@ -275,7 +297,6 @@ int main(int argc, char **argv)
 
         ROS_INFO("Wait for cylinder identification...");
 
-
         marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
         v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
         double D = v[7];
@@ -294,6 +315,10 @@ int main(int argc, char **argv)
 
           ROS_INFO("PICKING START!");
 
+          arm_group.setPlannerId("PRM");
+
+          moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+
           // Compute grasping
           grasp_pose grasp = computeCylinderGrasp(marker_array_msg,H,D);
 
@@ -302,57 +327,139 @@ int main(int argc, char **argv)
           target_pose = grasp.pregrasp_targetPose;
           stampPosition(target_pose);
           arm_group.setPoseTarget(target_pose);
-          arm_group.move();
+
+          success = (arm_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+          ROS_INFO_NAMED("Pick&Place", "Visualizing plan 1 (pre-grasp) %s", success ? "" : "FAILED");
+
+          if (success = true){
+            arm_group.execute(my_plan);
+            success = false;
+          }
+          else
+          {
+            goto out_label;
+          }
 
           //ros::Duration(0.1).sleep(); 
 
-          //2 move the arm_group arm to the target pose
+          //2 close gripper in the pre-grasping phase
+          joint_value = GripperApertureConversion(D+0.006);
+          ROS_INFO("Close gripper to joint value %.4f",joint_value);
+          gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
+          gripper_group.move();
+
+          //3 move the arm_group arm to the target pose
 
           ROS_INFO("Moving to grasp position...");
           target_pose = grasp.grasp_targetPose;
           stampPosition(target_pose);
-          arm_group.setPoseTarget(target_pose);
-          arm_group.move();
+          waypoints.push_back(target_pose);
+
+          fraction = arm_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+          waypoints.clear();
+
+          rt.setRobotTrajectoryMsg(*arm_group.getCurrentState(),trajectory);
+          itp.computeTimeStamps(rt,0.1,0.1);
+          rt.getRobotTrajectoryMsg(trajectory);
+
+          ROS_INFO_NAMED("Pick&Place", "Visualizing plan 2 (Grasping Cartesian path) (%.2f%% acheived)", fraction * 100.0);
+
+          if (fraction > 0.9){
+            arm_group.execute(trajectory);
+            fraction = 0;
+          }
+          else{
+            success = false;
+            goto out_label;
+          } 
 
           //ros::Duration(0.1).sleep();
 
-          //2 - Close gripper
-          double joint_value = GripperApertureConversion(D-0.001);
+          //4 - Close gripper
+          joint_value = GripperApertureConversion(D-0.002);
           ROS_INFO("Close gripper to joint value %.4f",joint_value);
           gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
           gripper_group.move();
 
           //ros::Duration(0.1).sleep();
 
-          //3 - Post-grasp movement
+          //5 - Post-grasp movement
           ROS_INFO("Moving to post-grasp position...");
           target_pose = grasp.pregrasp_targetPose;
           stampPosition(target_pose);
-          arm_group.setPoseTarget(target_pose);
-          arm_group.move();
+          waypoints.push_back(target_pose);
+
+          fraction = arm_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+          waypoints.clear();
+
+          rt.setRobotTrajectoryMsg(*arm_group.getCurrentState(),trajectory);
+          itp.computeTimeStamps(rt,0.1,0.1);
+          rt.getRobotTrajectoryMsg(trajectory);
+
+          ROS_INFO_NAMED("Pick&Place", "Visualizing plan 3 (Post-grasp Cartesian path) (%.2f%% acheived)", fraction * 100.0);
+
+          if (fraction > 0.9){
+            arm_group.execute(trajectory);
+            fraction = 0;
+          }
+          else{
+            success = false;
+            goto out_label;
+          } 
 
           //ros::Duration(0.1).sleep();  
 
-          //4 - Go home
+          grasping()
+
+
+          //6 - Go to home
+          //ROS_INFO("Going home...");
+          //arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
+          //arm_group.move();
+
+          //ros::Duration(0.1).sleep(); 
+
+          //7 - Go to drop position
+          ROS_INFO("Going to drop position...");
+          target_pose.orientation.x = 0;
+          target_pose.orientation.y = 1;
+          target_pose.orientation.z = 0;
+          target_pose.orientation.w = -0.0047801;
+
+          target_pose.position.x = 0.55213;
+          target_pose.position.y = 0;
+          target_pose.position.z = 0.3244;
+
+          arm_group.setPoseTarget(target_pose);
+          arm_group.move();
+
+          //8 - Open Gripper
+          ROS_INFO("Open gripper...");
+          joint_value = GripperApertureConversion(0.02); 
+          gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
+          //gripper_group.setJointValueTarget(gripper_group.getNamedTargetValues("open_gripper"));
+          gripper_group.move();
+
+
+          //ros::Duration(3.0).sleep();
+
+          //9 - Go to home
           ROS_INFO("Going home...");
           arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
           arm_group.move();
 
-          //ros::Duration(0.1).sleep(); 
-
-          //5 - Open Gripper
-          ROS_INFO("Open gripper...");
-          gripper_group.setJointValueTarget(gripper_group.getNamedTargetValues("open_gripper"));
-          gripper_group.move();
-
-          //ros::Duration(3.0).sleep();
-
           ROS_INFO("PICKING COMPLETED!");
+
+          out_label:
+          if (success = false)
+          {
+            ROS_INFO("PICKING ABORTED!");
+          }
 
         }
         else
         {
-          ROS_ERROR("No cylinder identified.");
+          ROS_ERROR("No cylinder found.");
         }
     }
 

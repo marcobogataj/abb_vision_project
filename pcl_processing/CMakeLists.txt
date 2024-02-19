@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
   pcl_conversions
   pcl_ros
   roscpp
+  rospy
   sensor_msgs
   tf2_ros
   tf2_eigen
@@ -22,6 +23,7 @@ find_package(catkin REQUIRED COMPONENTS
   moveit_visual_tools
   visualization_msgs
   message_filters
+  dynamic_reconfigure
 )
 
 ## System dependencies are found with CMake's conventions
@@ -229,3 +231,4 @@ target_link_libraries(test_sub_normals ${catkin_LIBRARIES})
 
 ## Add folders to be run by python nosetests
 # catkin_add_nosetests(test)
+

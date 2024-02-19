@@ -177,6 +177,10 @@ add_executable(simple_bin_picking_test src/simple_bin_picking_test.cpp)
 add_dependencies(simple_bin_picking_test${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 target_link_libraries(simple_bin_picking_test ${catkin_LIBRARIES})
 
+add_executable(bin_picking_motion src/bin_picking_motion.cpp)
+add_dependencies(bin_picking_motion ${test_random_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+target_link_libraries(bin_picking_motion ${catkin_LIBRARIES})
+
 #############
 ## Install ##
 #############
