@@ -219,8 +219,7 @@ int main(int argc, char **argv)
     moveit::planning_interface::MoveGroupInterface arm_group(PLANNING_GROUP_ARM);
     moveit::planning_interface::MoveGroupInterface gripper_group(PLANNING_GROUP_GRIPPER);
 
-    //Planning scene interface for collision objects
-    moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+    arm_group.startStateMonitor(1.0);
 
     /* //NOT WORKING: To fix
     auto psmPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
@@ -245,26 +244,29 @@ int main(int argc, char **argv)
     geometry_msgs::Pose target_pose;
     geometry_msgs::Pose target_pose3;
     
+    //Objects for cartesian path computation
     std::vector<geometry_msgs::Pose> waypoints;
     moveit_msgs::RobotTrajectory trajectory;
     robot_trajectory::RobotTrajectory rt(arm_group.getCurrentState()->getRobotModel(),"irb_120");
+    trajectory_processing::IterativeParabolicTimeParameterization itp;
     const double jump_threshold = 1.5;
     const double eef_step = 0.01;
     double fraction;
 
+    //Gripper joint value
     double joint_value;
 
-    trajectory_processing::IterativeParabolicTimeParameterization itp;
-
+    //Declarations for markers
     visualization_msgs::MarkerArray::ConstPtr marker_array_msg(new visualization_msgs::MarkerArray);
     std::vector<double> v; //cylindwe params. [x,y,z,qx,qy,qz,qw,diameter,height]
+    double D = 0;
+    double H = 0;
 
-    rviz_visual_tools::RvizVisualTools rviz_interface("base_link","/visualization_marker_array");
-
-    // visualize the planning
-    
+    //Initialize planning
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    bool success = false;
+    bool success = true;
+
+    std::string inputString;
 
     CHECK(ros::service::waitForService("/zivid_capture/zivid_capture_suggested",default_wait_duration));
 
@@ -276,43 +278,54 @@ int main(int argc, char **argv)
     gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
     gripper_group.move();
 
+    do
+    {
+      ROS_INFO("Initialize point cloud scene...");
+
+      auto result = system("rosservice call /zivid_capture/zivid_capture_suggested");
+
+      ROS_INFO("Wait for cylinder identification...");
+
+      marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+      v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+      D = v[7];
+      H = v[8];
+
+      if(D != 0)
+      {
+        ROS_INFO("Cylinder idientified! Scene initialized");
+
+        v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+
+        //std::cout<<"D: "<<D<<"mm "<<"H: "<<H<<"mm "<<std::endl;
+        //std::cout<<"Position [x,y,z]=["<<v[0]<<","<<v[1]<<","<<v[2]<<"]"<<std::endl;
+        //std::cout<<"Orientation [qx,qy,qz,qw]="<<v[3]<<","<<v[4]<<","<<v[5]<<","<<v[6]<<"]"<<std::endl;
+      }
+      else
+      {
+        ROS_ERROR("No cylinder found. Try changing the scene");
+        ROS_INFO("Type c to capture again. Anything else to shutdown");
+        std::getline(std::cin, inputString);
+        if(inputString != "c"){
+          ros::shutdown();    
+        }
+      }
+
+    } while (D == 0);
 
     while(ros::ok())
     {
-        std::string inputString;
-        ROS_INFO("Type p to pick cylinder. Anything else to shutdown");
+        ROS_INFO("Type p to start picking! Anything else to shutdown");
         std::getline(std::cin, inputString);
 
-        // remove markers
-        ROS_INFO("Clean all markers");
-        rviz_interface.deleteAllMarkers();
-
-        if(inputString == "p"){
-            ROS_INFO("Start camera acquisition...");
-            auto result = system("rosservice call /zivid_capture/zivid_capture_suggested");
-        }
-        else{
-            ros::shutdown();
+        if(inputString != "p"){
+          ros::shutdown();    
         }
 
-        ROS_INFO("Wait for cylinder identification...");
-
-        marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
-        v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
-        double D = v[7];
-        double H = v[8];
-
+        //IDEALLY here we already have D,H and pose of new cylinder
 
         if (D != 0)
         {
-          ROS_INFO("Cylinder idientified!");
-
-          v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
-
-          std::cout<<"D: "<<D<<"mm "<<"H: "<<H<<"mm "<<std::endl;
-          std::cout<<"Position [x,y,z]=["<<v[0]<<","<<v[1]<<","<<v[2]<<"]"<<std::endl;
-          std::cout<<"Orientation [qx,qy,qz,qw]="<<v[3]<<","<<v[4]<<","<<v[5]<<","<<v[6]<<"]"<<std::endl;
-
           ROS_INFO("PICKING START!");
 
           arm_group.setPlannerId("PRM");
@@ -322,149 +335,220 @@ int main(int argc, char **argv)
           // Compute grasping
           grasp_pose grasp = computeCylinderGrasp(marker_array_msg,H,D);
 
-          //1 move the arm_group arm close to the target pose
-          ROS_INFO("Moving to pre-grasp position...");
-          target_pose = grasp.pregrasp_targetPose;
-          stampPosition(target_pose);
-          arm_group.setPoseTarget(target_pose);
+          while(true) //while grasping planning does not fail
+          {
+            //1 move the arm_group arm close to the target pose
+            ROS_INFO("Moving to pre-grasp position...");
+            target_pose = grasp.pregrasp_targetPose;
+            stampPosition(target_pose);
+            arm_group.setPoseTarget(target_pose); //valutare il computeCartesianPath
 
-          success = (arm_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-          ROS_INFO_NAMED("Pick&Place", "Visualizing plan 1 (pre-grasp) %s", success ? "" : "FAILED");
+            success = (arm_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
+            ROS_INFO_NAMED("Pick&Place", "Visualizing plan 1 (pre-grasp) %s", success ? "" : "FAILED");
 
-          if (success = true){
+            if(!success){break;}
+
             arm_group.execute(my_plan);
-            success = false;
+
+            //ros::Duration(0.1).sleep(); 
+
+            //2 close gripper in the pre-grasping phase
+            joint_value = GripperApertureConversion(D+0.006);
+            ROS_INFO("Close gripper to joint value %.4f",joint_value);
+            gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
+            gripper_group.move();
+
+            //3 move the arm_group arm to the target pose
+
+            ROS_INFO("Moving to grasp position...");
+            target_pose = grasp.grasp_targetPose;
+            stampPosition(target_pose);
+            waypoints.push_back(target_pose);
+
+            fraction = arm_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+            waypoints.clear();
+
+            rt.setRobotTrajectoryMsg(*arm_group.getCurrentState(),trajectory);
+            itp.computeTimeStamps(rt,0.1,0.1);
+            rt.getRobotTrajectoryMsg(trajectory);
+
+            ROS_INFO_NAMED("Pick&Place", "Visualizing plan 2 (Grasping Cartesian path) (%.2f%% acheived)", fraction * 100.0);
+
+            if (fraction < 0.9){
+              success = false;
+              break;
+            }
+
+            arm_group.execute(trajectory);
+
+            //ros::Duration(0.1).sleep();
+
+            //4 - Close gripper
+            joint_value = GripperApertureConversion(D-0.002);
+            ROS_INFO("Close gripper to joint value %.4f",joint_value);
+            gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
+            gripper_group.move();
+
+            //ros::Duration(0.1).sleep();
+
+            //5 - Post-grasp movement
+            ROS_INFO("Moving to post-grasp position...");
+            target_pose = grasp.pregrasp_targetPose;
+            stampPosition(target_pose);
+            waypoints.push_back(target_pose);
+
+            fraction = arm_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
+            waypoints.clear();
+
+            rt.setRobotTrajectoryMsg(*arm_group.getCurrentState(),trajectory);
+            itp.computeTimeStamps(rt,0.1,0.1);
+            rt.getRobotTrajectoryMsg(trajectory);
+
+            ROS_INFO_NAMED("Pick&Place", "Visualizing plan 3 (Post-grasp Cartesian path) (%.2f%% acheived)", fraction * 100.0);
+
+            if (fraction < 0.9){
+              success = false;
+              break;
+            }
+
+            arm_group.execute(trajectory);
+            
+            //6 - Go to home
+            //ROS_INFO("Going home...");
+            //arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
+            //arm_group.move();
+
+            //7 - Go to drop position
+            ROS_INFO("Going to drop position...");
+            target_pose.orientation.x = 0;
+            target_pose.orientation.y = 1;
+            target_pose.orientation.z = 0;
+            target_pose.orientation.w = -0.0047801;
+
+            target_pose.position.x = 0.55213;
+            target_pose.position.y = 0;
+            target_pose.position.z = 0.3244;
+
+            arm_group.setPoseTarget(target_pose); //valutare il computeCartesianPath
+            arm_group.asyncMove(); 
+
+            while (arm_group.getCurrentPose().pose.position.y < -0.35) 
+            {
+              std::cout<<"EEF pose.position.y = "<< arm_group.getCurrentPose().pose.position.y <<std::endl;
+            }
+            ROS_INFO("Manipulator is out of the camera view. Capture...");
+            auto result = system("rosservice call /zivid_capture/zivid_capture_suggested");
+
+            //while (arm_group.getCurrentPose().pose != GOAL )  //TO DO: write boolean function to check if goal is satisfied from getCurrentPose()
+            //{
+            marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+            //}
+
+            //8 - Open Gripper
+            ROS_INFO("Open gripper...");
+            joint_value = GripperApertureConversion(0.02); 
+            gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
+            //gripper_group.setJointValueTarget(gripper_group.getNamedTargetValues("open_gripper"));
+            gripper_group.move(); //provare se facendo asyncMove e iscrivendosi al topic del cylindro riesco a ottenere il risultato del processing
+
+            v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+            D = v[7];
+            H = v[8];
+
+            if(D != 0)
+            {
+              ROS_INFO("Cylinder idientified!");
+
+              v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+            }
+            else
+
+
+
+
+            //ros::Duration(3.0).sleep();
+
+            //9 - Go to home
+            //ROS_INFO("Going home...");
+            //arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
+            //arm_group.move();
+
+            break;
+          }
+          
+          if (!success)
+          {
+            ROS_ERROR("PLANNING FAILED. ABORTED!");
+            //! - Go to home
+            ROS_INFO("Going home...");
+            arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
+            arm_group.move();
+
+            do
+            {
+              ROS_ERROR("No pickable cylinder found. Try changing the scene");
+              ROS_INFO("Type c to capture again. Anything else to shutdown");
+              std::getline(std::cin, inputString);
+              if(inputString != "c"){
+                ros::shutdown(); 
+              }
+              else
+              {
+                auto result = system("rosservice call /zivid_capture/zivid_capture_suggested");
+
+                ROS_INFO("Wait for cylinder identification...");
+
+                marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+                v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+                D = v[7];
+                H = v[8];
+
+                if(D != 0)
+                {
+                ROS_INFO("Cylinder idientified! Scene initialized");
+
+                v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+                }
+              }   
+            }   
+            while (D == 0);
           }
           else
           {
-            goto out_label;
+            ROS_INFO("PICKING COMPLETED!");
           }
-
-          //ros::Duration(0.1).sleep(); 
-
-          //2 close gripper in the pre-grasping phase
-          joint_value = GripperApertureConversion(D+0.006);
-          ROS_INFO("Close gripper to joint value %.4f",joint_value);
-          gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
-          gripper_group.move();
-
-          //3 move the arm_group arm to the target pose
-
-          ROS_INFO("Moving to grasp position...");
-          target_pose = grasp.grasp_targetPose;
-          stampPosition(target_pose);
-          waypoints.push_back(target_pose);
-
-          fraction = arm_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
-          waypoints.clear();
-
-          rt.setRobotTrajectoryMsg(*arm_group.getCurrentState(),trajectory);
-          itp.computeTimeStamps(rt,0.1,0.1);
-          rt.getRobotTrajectoryMsg(trajectory);
-
-          ROS_INFO_NAMED("Pick&Place", "Visualizing plan 2 (Grasping Cartesian path) (%.2f%% acheived)", fraction * 100.0);
-
-          if (fraction > 0.9){
-            arm_group.execute(trajectory);
-            fraction = 0;
-          }
-          else{
-            success = false;
-            goto out_label;
-          } 
-
-          //ros::Duration(0.1).sleep();
-
-          //4 - Close gripper
-          joint_value = GripperApertureConversion(D-0.002);
-          ROS_INFO("Close gripper to joint value %.4f",joint_value);
-          gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
-          gripper_group.move();
-
-          //ros::Duration(0.1).sleep();
-
-          //5 - Post-grasp movement
-          ROS_INFO("Moving to post-grasp position...");
-          target_pose = grasp.pregrasp_targetPose;
-          stampPosition(target_pose);
-          waypoints.push_back(target_pose);
-
-          fraction = arm_group.computeCartesianPath(waypoints, eef_step, jump_threshold, trajectory);
-          waypoints.clear();
-
-          rt.setRobotTrajectoryMsg(*arm_group.getCurrentState(),trajectory);
-          itp.computeTimeStamps(rt,0.1,0.1);
-          rt.getRobotTrajectoryMsg(trajectory);
-
-          ROS_INFO_NAMED("Pick&Place", "Visualizing plan 3 (Post-grasp Cartesian path) (%.2f%% acheived)", fraction * 100.0);
-
-          if (fraction > 0.9){
-            arm_group.execute(trajectory);
-            fraction = 0;
-          }
-          else{
-            success = false;
-            goto out_label;
-          } 
-
-          //ros::Duration(0.1).sleep();  
-
-          grasping()
-
-
-          //6 - Go to home
-          //ROS_INFO("Going home...");
-          //arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
-          //arm_group.move();
-
-          //ros::Duration(0.1).sleep(); 
-
-          //7 - Go to drop position
-          ROS_INFO("Going to drop position...");
-          target_pose.orientation.x = 0;
-          target_pose.orientation.y = 1;
-          target_pose.orientation.z = 0;
-          target_pose.orientation.w = -0.0047801;
-
-          target_pose.position.x = 0.55213;
-          target_pose.position.y = 0;
-          target_pose.position.z = 0.3244;
-
-          arm_group.setPoseTarget(target_pose);
-          arm_group.move();
-
-          //8 - Open Gripper
-          ROS_INFO("Open gripper...");
-          joint_value = GripperApertureConversion(0.02); 
-          gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
-          //gripper_group.setJointValueTarget(gripper_group.getNamedTargetValues("open_gripper"));
-          gripper_group.move();
-
-
-          //ros::Duration(3.0).sleep();
-
-          //9 - Go to home
-          ROS_INFO("Going home...");
-          arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
-          arm_group.move();
-
-          ROS_INFO("PICKING COMPLETED!");
-
-          out_label:
-          if (success = false)
-          {
-            ROS_INFO("PICKING ABORTED!");
-          }
-
         }
         else
         {
-          ROS_ERROR("No cylinder found.");
+          do
+          {
+            ROS_ERROR("No cylinder found. Try changing the scene");
+            ROS_INFO("Type c to capture again. Anything else to shutdown");
+            std::getline(std::cin, inputString);
+            if(inputString != "c"){
+              ros::shutdown(); 
+            }
+            else
+            {
+              auto result = system("rosservice call /zivid_capture/zivid_capture_suggested");
+
+              ROS_INFO("Wait for cylinder identification...");
+
+              marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+              v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+              D = v[7];
+              H = v[8];
+
+              if(D != 0)
+              {
+              ROS_INFO("Cylinder idientified! Scene initialized");
+
+              v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
+              }
+            }   
+          } while (D == 0);
         }
     }
-
-
     ros::shutdown();
     return 0;
-
 }
