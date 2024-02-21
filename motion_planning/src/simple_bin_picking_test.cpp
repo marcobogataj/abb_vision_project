@@ -197,13 +197,73 @@ void stampPosition(geometry_msgs::Pose Pose)
   ros::spinOnce;
 } 
 
+bool checkArmGoal(geometry_msgs::Pose arm_pose, geometry_msgs::Pose arm_goal, double tolerance)
+{
+  double r_tolerance2 = pow(tolerance,2);
+  double dx2 = pow(arm_goal.position.x - arm_pose.position.x,2);
+  double dy2 = pow(arm_goal.position.y - arm_pose.position.y,2);
+  double dz2 = pow(arm_goal.position.z - arm_pose.position.z,2);
+
+  /*
+  tf2::Quaternion q_pose(
+        arm_pose.orientation.x,
+        arm_pose.orientation.y,
+        arm_pose.orientation.z,
+        arm_pose.orientation.w);
+
+  tf2::Matrix3x3 m_pose(q_pose);
+  double roll_pose, pitch_pose, yaw_pose;
+  m_pose.getRPY(roll_pose, pitch_pose, yaw_pose);
+
+  tf2::Quaternion q_goal(
+        arm_goal.orientation.x,
+        arm_goal.orientation.y,
+        arm_goal.orientation.z,
+        arm_goal.orientation.w);
+
+  tf2::Matrix3x3 m_goal(q_goal);
+  double roll_goal, pitch_goal, yaw_goal;
+  m_goal.getRPY(roll_goal, pitch_goal, yaw_goal);
+
+  double droll = abs(roll_goal - roll_pose);
+  double dpitch = abs(pitch_goal - pitch_pose);
+  double dyaw = abs(yaw_goal - yaw_pose);
+
+  std::cout<<"radius_error = "<<dx2+dy2+dz2;
+  std::cout<<"dpitch = "<<dpitch;
+  std::cout<<"droll = "<<droll;
+  std::cout<<"dyaw = "<<dyaw;
+  */
+
+  std::cout<<"radius_error = "<<dx2+dy2+dz2;
+
+  if ( (dx2 + dy2 + dz2) < r_tolerance2) 
+  {
+    ROS_INFO("Arm's goal reached!");
+    return true;
+  }
+  return false;
+  
+}
+
+bool checkGripperGoal(std::vector<double> gripper_joint_state, double gripper_joint_goal, double tolerance)
+{
+  std::cout<<"Abs joint error = " <<abs(gripper_joint_goal - gripper_joint_state[0])<<std::endl;
+  if (abs(gripper_joint_goal - gripper_joint_state[0]) < tolerance)
+  {
+    ROS_INFO("Grippers's goal reached!");
+    return true;
+  }
+  return false;
+}
+
 int main(int argc, char **argv)
 {
     //creation of the node and named it
     ros::init(argc, argv, "simple_bin_picking_test");
     ros::NodeHandle nh;
 
-    ros::AsyncSpinner spinner(1);
+    ros::AsyncSpinner spinner(2);
     spinner.start();
 
     sleep(2.0);
@@ -220,6 +280,7 @@ int main(int argc, char **argv)
     moveit::planning_interface::MoveGroupInterface gripper_group(PLANNING_GROUP_GRIPPER);
 
     arm_group.startStateMonitor(1.0);
+    gripper_group.startStateMonitor(1.0);
 
     /* //NOT WORKING: To fix
     auto psmPtr = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
@@ -240,10 +301,27 @@ int main(int argc, char **argv)
     ROS_INFO("Reference frame: %s", arm_group.getPlanningFrame().c_str());
     ROS_INFO("Reference frame: %s", arm_group.getEndEffectorLink().c_str());
 
-    //Target position 
-    geometry_msgs::Pose target_pose;
-    geometry_msgs::Pose target_pose3;
-    
+    //Target Poses 
+    geometry_msgs::Pose target_pose, intermediate_pose, drop_pose;
+
+    //between picking and placing
+    intermediate_pose.orientation.x = 0;
+    intermediate_pose.orientation.y = 0.97897;
+    intermediate_pose.orientation.z = 0;
+    intermediate_pose.orientation.w = 0.20401;
+    intermediate_pose.position.x = 0.42237;
+    intermediate_pose.position.y = 0;
+    intermediate_pose.position.z = 0.45176;
+
+    //for placing
+    drop_pose.orientation.x = 0;
+    drop_pose.orientation.y = 1;
+    drop_pose.orientation.z = 0;
+    drop_pose.orientation.w = -0.0047801;
+    drop_pose.position.x = 0.55213;
+    drop_pose.position.y = 0;
+    drop_pose.position.z = 0.3244;
+
     //Objects for cartesian path computation
     std::vector<geometry_msgs::Pose> waypoints;
     moveit_msgs::RobotTrajectory trajectory;
@@ -266,6 +344,8 @@ int main(int argc, char **argv)
     moveit::planning_interface::MoveGroupInterface::Plan my_plan;
     bool success = true;
 
+    ros::Duration timeout(10.0);
+
     std::string inputString;
 
     CHECK(ros::service::waitForService("/zivid_capture/zivid_capture_suggested",default_wait_duration));
@@ -286,7 +366,7 @@ int main(int argc, char **argv)
 
       ROS_INFO("Wait for cylinder identification...");
 
-      marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+      marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("processing_marker_array",nh,timeout);
       v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
       D = v[7];
       H = v[8];
@@ -332,19 +412,20 @@ int main(int argc, char **argv)
 
           moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 
-          // Compute grasping
-          grasp_pose grasp = computeCylinderGrasp(marker_array_msg,H,D);
 
           while(true) //while grasping planning does not fail
           {
+            // Compute grasping
+            grasp_pose grasp = computeCylinderGrasp(marker_array_msg,H,D);
+
             //1 move the arm_group arm close to the target pose
             ROS_INFO("Moving to pre-grasp position...");
             target_pose = grasp.pregrasp_targetPose;
             stampPosition(target_pose);
-            arm_group.setPoseTarget(target_pose); //valutare il computeCartesianPath
+            arm_group.setPoseTarget(target_pose); //valutare il planning
 
             success = (arm_group.plan(my_plan) == moveit::planning_interface::MoveItErrorCode::SUCCESS);
-            ROS_INFO_NAMED("Pick&Place", "Visualizing plan 1 (pre-grasp) %s", success ? "" : "FAILED");
+            ROS_INFO_NAMED("Pick&Place", "Visualizing plan 1 (pre-grasp) %s", success ? "SUCCEDED" : "FAILED");
 
             if(!success){break;}
 
@@ -413,43 +494,39 @@ int main(int argc, char **argv)
 
             arm_group.execute(trajectory);
             
-            //6 - Go to home
-            //ROS_INFO("Going home...");
-            //arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
-            //arm_group.move();
 
-            //7 - Go to drop position
-            ROS_INFO("Going to drop position...");
-            target_pose.orientation.x = 0;
-            target_pose.orientation.y = 1;
-            target_pose.orientation.z = 0;
-            target_pose.orientation.w = -0.0047801;
+            //6 - Go to drop point
+            ROS_INFO("Going to drop point...");
+            arm_group.setPoseTarget(drop_pose);
+            arm_group.asyncMove();
 
-            target_pose.position.x = 0.55213;
-            target_pose.position.y = 0;
-            target_pose.position.z = 0.3244;
-
-            arm_group.setPoseTarget(target_pose); //valutare il computeCartesianPath
-            arm_group.asyncMove(); 
-
-            while (arm_group.getCurrentPose().pose.position.y < -0.35) 
+            /*
+            while (arm_group.getCurrentPose().pose.position.y < -0.30) 
             {
               std::cout<<"EEF pose.position.y = "<< arm_group.getCurrentPose().pose.position.y <<std::endl;
             }
             ROS_INFO("Manipulator is out of the camera view. Capture...");
-            auto result = system("rosservice call /zivid_capture/zivid_capture_suggested");
+            */
 
-            //while (arm_group.getCurrentPose().pose != GOAL )  //TO DO: write boolean function to check if goal is satisfied from getCurrentPose()
-            //{
-            marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
-            //}
+            ROS_INFO("Capture..."); //capture while moving to intermediate point
+            system("rosservice call /zivid_capture/zivid_capture_suggested");
+            
+            do  //boolean function to check if goal is satisfied from getCurrentPose()
+            {
+              std::cout<<"Waiting to reach arm goal..." <<std::endl;
+            }
+            while (!checkArmGoal(arm_group.getCurrentPose().pose, drop_pose, 0.0001)); 
 
-            //8 - Open Gripper
+            //8 - Open Gripper while moving to drop position
             ROS_INFO("Open gripper...");
             joint_value = GripperApertureConversion(0.02); 
             gripper_group.setJointValueTarget("robotiq_85_left_knuckle_joint",joint_value);
             //gripper_group.setJointValueTarget(gripper_group.getNamedTargetValues("open_gripper"));
             gripper_group.move(); //provare se facendo asyncMove e iscrivendosi al topic del cylindro riesco a ottenere il risultato del processing
+
+            //Retrieve cylinder information from the point cloud processed while placing the object
+
+            marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("processing_marker_array", nh,timeout);
 
             v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
             D = v[7];
@@ -458,22 +535,19 @@ int main(int argc, char **argv)
             if(D != 0)
             {
               ROS_INFO("Cylinder idientified!");
-
-              v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
             }
             else
-
-
-
-
+            {
+              success = false;
+              break;
+            }
+  
             //ros::Duration(3.0).sleep();
 
             //9 - Go to home
             //ROS_INFO("Going home...");
             //arm_group.setJointValueTarget(arm_group.getNamedTargetValues("home"));
             //arm_group.move();
-
-            break;
           }
           
           if (!success)
@@ -498,7 +572,7 @@ int main(int argc, char **argv)
 
                 ROS_INFO("Wait for cylinder identification...");
 
-                marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+                marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("processing_marker_array",nh, timeout);
                 v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
                 D = v[7];
                 H = v[8];
@@ -534,7 +608,7 @@ int main(int argc, char **argv)
 
               ROS_INFO("Wait for cylinder identification...");
 
-              marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("visualization_marker_array",nh);
+              marker_array_msg = ros::topic::waitForMessage<visualization_msgs::MarkerArray>("processing_marker_array",nh, timeout);
               v = marker2vector(marker_array_msg); //get cylinder marker parameters in a vector
               D = v[7];
               H = v[8];

@@ -58,7 +58,8 @@ public:
 
     sync.registerCallback(boost::bind(&CylinderSegment::cloudCB,this, _1, _2));
 
-    visualization_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 0 );
+    visualization_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("visualization_marker_array", 0);
+    cylinder_publisher_ = nh_.advertise<visualization_msgs::MarkerArray>("processing_marker_array", 0);
     processed_cloud_publisher_ = nh_.advertise<pcl::PointCloud<pcl::PointXYZRGB>>("/pcl_processing/clusters/xyzrgb", 1);
     cylinder_cloud_publisher_ = nh_.advertise<pcl::PointCloud<pcl::PointXYZ>>("/pcl_processing/cylinder/xyz", 1);
   }
@@ -203,6 +204,13 @@ public:
     marker_array.markers[1].color.b = 0.0;
 
     visualization_publisher_.publish( marker_array );
+
+    do 
+    {}
+    while (cylinder_publisher_.getNumSubscribers() == 0);
+
+    ros::Duration(0.1).sleep(); // sleep for 0.1 seconds
+    cylinder_publisher_.publish( marker_array );
     // END_SUB_TUTORIAL
   }
 
@@ -530,6 +538,7 @@ public:
         ROS_INFO("Cylinder found in cluster %d!",count_j);
         ROS_INFO("Adding cilindrical CollisionObject to PlanningScene");
 
+        std::cout<<"Publish cloud cylinder "<<std::endl;
         cylinder_cloud_publisher_.publish(cloud_cylinder); //publish labeled clusters point cloud
 
         cylinder_params.radius = coefficients_cylinder->values[6];
@@ -540,13 +549,15 @@ public:
         cylinder_params.direction_vec[2] = coefficients_cylinder->values[5];
 
         // Compute center point and height of the cylinder using point cloud projection on the cylinder axis
+        std::cout<<"Estimate location "<<std::endl;
         estimateLocationHeight(cloud_cylinder, coefficients_cylinder);
 
         break;
       }
     }
-
+    
     // Use the parameters extracted to add the cylinder to the planning scene as a collision object.
+    std::cout<<"Add cylinder: "<<std::endl;
     addCylinder();
 
   }
@@ -561,6 +572,7 @@ private:
   ros::Publisher visualization_publisher_;
   ros::Publisher processed_cloud_publisher_;
   ros::Publisher cylinder_cloud_publisher_;
+  ros::Publisher cylinder_publisher_;
 
   TimeSynchronizer<pcl::PointCloud<pcl::PointXYZ>, pcl::PointCloud<pcl::Normal>> sync;
 
@@ -600,7 +612,7 @@ private:
 int main(int argc, char** argv)
 {
   // Initialize ROS
-  ros::init(argc, argv, "cylinder_segment");
+  ros::init(argc, argv, "screw_perception");
 
   //TO DO: implement condition on service callback/result before starting to segment.
 
